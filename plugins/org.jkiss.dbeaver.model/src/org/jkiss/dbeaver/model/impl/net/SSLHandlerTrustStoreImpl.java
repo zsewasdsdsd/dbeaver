@@ -32,13 +32,20 @@ import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.KeyStore;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Default Java SSL Handler. Saves certificate in local trust store
@@ -205,7 +212,7 @@ public class SSLHandlerTrustStoreImpl extends SSLHandlerImpl {
             return false;
         }
         final Reader reader = new StringReader(new String(key, StandardCharsets.UTF_8));
-        Files.write(tempDerFile, DefaultCertificateStorage.loadDerFromPem(reader));
+        writePrivateKeyFile(tempDerFile, DefaultCertificateStorage.loadDerFromPem(reader));
         String derCertPath = tempDerFile.toAbsolutePath().toString();
         if (DBWorkbench.isDistributed() || DBWorkbench.getPlatform().getApplication().isMultiuser()) {
             handler.setSecureProperty(SSLHandlerTrustStoreImpl.PROP_SSL_CLIENT_KEY, derCertPath);
@@ -216,6 +223,26 @@ public class SSLHandlerTrustStoreImpl extends SSLHandlerImpl {
         // The chain is built asynchronously by the driver, and we don't know at which moment in time it will happen.
         // It will still be deleted during shutdown.
         return true;
+    }
+
+    // Create private keys with the final permissions immediately, not after writing
+    // the key bytes: otherwise the default umask can expose them to other users.
+    static void writePrivateKeyFile(@NotNull Path path, byte @NotNull [] contents) throws IOException {
+        if (Files.getFileStore(path.getParent()).supportsFileAttributeView(PosixFileAttributeView.class)) {
+            Set<PosixFilePermission> ownerOnly = PosixFilePermissions.fromString("rw-------");
+            try {
+                Files.createFile(path, PosixFilePermissions.asFileAttribute(ownerOnly));
+            } catch (FileAlreadyExistsException e) {
+                // A previous connection attempt can leave this file behind.
+                // Never follow a symlink or replace a non-regular filesystem object with key data.
+                if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+                    throw new IOException("SSL private key target is not a regular file: " + path, e);
+                }
+                Files.setPosixFilePermissions(path, ownerOnly);
+            }
+        }
+        Files.write(path, contents, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING,
+            StandardOpenOption.WRITE);
     }
 
     /**
