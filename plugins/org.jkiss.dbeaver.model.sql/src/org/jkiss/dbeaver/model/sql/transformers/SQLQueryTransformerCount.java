@@ -22,6 +22,7 @@ import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.AllColumns;
 import net.sf.jsqlparser.statement.select.Distinct;
+import net.sf.jsqlparser.statement.select.ParenthesedSelect;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.statement.select.SelectItem;
@@ -114,7 +115,13 @@ public class SQLQueryTransformerCount implements SQLQueryTransformer {
     private SQLQuery tryInjectCount(@NotNull DBPDataSource dataSource, @NotNull SQLQuery query) throws DBException {
         try {
             Statement statement = SQLSemanticProcessor.parseQuery(query.getText());
-            if (statement instanceof PlainSelect select) {
+            // Parenthesized SELECTs are valid top-level MySQL statements. Unwrap only for
+            // AST rewriting; render the outer statement so its original structure remains intact.
+            Select selectBody = statement instanceof Select selectStatement ? selectStatement : null;
+            while (selectBody instanceof ParenthesedSelect parenthesedSelect) {
+                selectBody = parenthesedSelect.getSelect();
+            }
+            if (selectBody instanceof PlainSelect select) {
                 if (select.getHaving() != null) {
                     throw new DBException("Can't inject COUNT into query with HAVING clause");
                 }
@@ -148,7 +155,7 @@ public class SQLQueryTransformerCount implements SQLQueryTransformer {
                 selectItems.add(new SelectItem(countFunc));
                 select.setSelectItems(selectItems);
                 select.setOrderByElements(null);
-                return new SQLQuery(dataSource, select.toString(), query, false);
+                return new SQLQuery(dataSource, statement.toString(), query, false);
             } else {
                 throw new DBException("Query [" + query.getText() + "] can't be modified");
             }
