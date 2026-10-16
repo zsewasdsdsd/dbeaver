@@ -227,7 +227,7 @@ public class SSLHandlerTrustStoreImpl extends SSLHandlerImpl {
 
     // Create private keys with the final permissions immediately, not after writing
     // the key bytes: otherwise the default umask can expose them to other users.
-    static void writePrivateKeyFile(@NotNull Path path, byte @NotNull [] contents) throws IOException {
+    static void writePrivateKeyFile(@NotNull Path path, @NotNull byte[] contents) throws IOException {
         if (Files.getFileStore(path.getParent()).supportsFileAttributeView(PosixFileAttributeView.class)) {
             Set<PosixFilePermission> ownerOnly = PosixFilePermissions.fromString("rw-------");
             try {
