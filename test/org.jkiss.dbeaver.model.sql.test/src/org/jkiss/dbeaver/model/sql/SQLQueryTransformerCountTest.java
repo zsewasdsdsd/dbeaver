@@ -42,7 +42,7 @@ public class SQLQueryTransformerCountTest extends DBeaverUnitTest {
     public void acceptsNonPlainSelectSyntaxTrees() {
         ParenthesedSelect statement = new ParenthesedSelect();
 
-        Assertions.assertFalse(statement instanceof PlainSelect);
+        Assertions.assertFalse(PlainSelect.class.isInstance(statement));
         Assertions.assertTrue(SQLQueryTransformerCount.isCountableSelect(statement));
     }
 
