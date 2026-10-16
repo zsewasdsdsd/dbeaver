@@ -23,8 +23,10 @@ import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.AllColumns;
 import net.sf.jsqlparser.statement.select.Distinct;
 import net.sf.jsqlparser.statement.select.PlainSelect;
+import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.statement.select.SelectItem;
 import org.jkiss.code.NotNull;
+import org.jkiss.code.Nullable;
 import org.jkiss.dbeaver.DBException;
 import org.jkiss.dbeaver.Log;
 import org.jkiss.dbeaver.model.DBPDataSource;
@@ -46,6 +48,14 @@ public class SQLQueryTransformerCount implements SQLQueryTransformer {
 
     private static final String COUNT_WRAP_PREFIX = "SELECT COUNT(*) FROM (";
     private static final String COUNT_WRAP_POSTFIX = "\n) dbvrcnt";
+
+    /**
+     * All JSQLParser SELECT variants (including CTE/parenthesized SELECT forms) can be
+     * counted by wrapping them as a subquery, not just PlainSelect and SetOperationList.
+     */
+    public static boolean isCountableSelect(@Nullable Statement statement) {
+        return statement instanceof Select;
+    }
 
     @NotNull
     @Override
