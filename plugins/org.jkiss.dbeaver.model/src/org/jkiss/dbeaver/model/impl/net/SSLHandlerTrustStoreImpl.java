@@ -32,10 +32,11 @@ import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
@@ -225,24 +226,33 @@ public class SSLHandlerTrustStoreImpl extends SSLHandlerImpl {
         return true;
     }
 
-    // Create private keys with the final permissions immediately, not after writing
-    // the key bytes: otherwise the default umask can expose them to other users.
+    // Stage private key bytes in an owner-only file before exposing them at the
+    // configured path. An atomic replacement also avoids following a symlink
+    // inserted between validating an existing target and writing its contents.
     static void writePrivateKeyFile(@NotNull Path path, @NotNull byte[] contents) throws IOException {
         if (Files.getFileStore(path.getParent()).supportsFileAttributeView(PosixFileAttributeView.class)) {
-            Set<PosixFilePermission> ownerOnly = PosixFilePermissions.fromString("rw-------");
-            try {
-                Files.createFile(path, PosixFilePermissions.asFileAttribute(ownerOnly));
-            } catch (FileAlreadyExistsException e) {
-                // A previous connection attempt can leave this file behind.
-                // Never follow a symlink or replace a non-regular filesystem object with key data.
-                if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
-                    throw new IOException("SSL private key target is not a regular file: " + path, e);
-                }
-                Files.setPosixFilePermissions(path, ownerOnly);
+            if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)
+                    && !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IOException("SSL private key target is not a regular file: " + path);
             }
+
+            Set<PosixFilePermission> ownerOnly = PosixFilePermissions.fromString("rw-------");
+            Path staged = Files.createTempFile(path.getParent(), ".dbeaver-private-", ".tmp",
+                PosixFilePermissions.asFileAttribute(ownerOnly));
+            try {
+                Files.write(staged, contents);
+                try {
+                    Files.move(staged, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                } catch (AtomicMoveNotSupportedException e) {
+                    Files.move(staged, path, StandardCopyOption.REPLACE_EXISTING);
+                }
+            } finally {
+                Files.deleteIfExists(staged);
+            }
+        } else {
+            Files.write(path, contents, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE);
         }
-        Files.write(path, contents, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING,
-            StandardOpenOption.WRITE);
     }
 
     /**
