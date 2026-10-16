@@ -27,7 +27,6 @@ import org.jkiss.dbeaver.model.runtime.DBRProgressMonitor;
 import org.jkiss.dbeaver.runtime.DBWorkbench;
 import org.jkiss.utils.CommonUtils;
 
-import javax.net.ssl.*;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
@@ -47,6 +46,8 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+
+import javax.net.ssl.*;
 
 /**
  * Default Java SSL Handler. Saves certificate in local trust store
