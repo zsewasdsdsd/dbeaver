@@ -40,6 +40,7 @@ public class SSLHandlerTrustStoreImplTest {
         SSLHandlerTrustStoreImpl.writePrivateKeyFile(keyFile, key);
 
         Assertions.assertArrayEquals(key, Files.readAllBytes(keyFile));
+        assertNoStagingFiles();
         if (supportsPosixPermissions()) {
             Assertions.assertEquals(
                 PosixFilePermissions.fromString("rw-------"),
@@ -58,6 +59,7 @@ public class SSLHandlerTrustStoreImplTest {
         SSLHandlerTrustStoreImpl.writePrivateKeyFile(keyFile, new byte[]{5, 6});
 
         Assertions.assertArrayEquals(new byte[]{5, 6}, Files.readAllBytes(keyFile));
+        assertNoStagingFiles();
         Assertions.assertEquals(
             PosixFilePermissions.fromString("rw-------"),
             Files.getPosixFilePermissions(keyFile)
@@ -77,6 +79,29 @@ public class SSLHandlerTrustStoreImplTest {
             () -> SSLHandlerTrustStoreImpl.writePrivateKeyFile(link, new byte[]{1, 2})
         );
         Assertions.assertEquals("must not be changed", Files.readString(targetFile));
+        assertNoStagingFiles();
+    }
+
+    @Test
+    public void refusesDirectoryAsPrivateKeyTarget() throws IOException {
+        Assumptions.assumeTrue(supportsPosixPermissions());
+        Path keyFile = tempDir.resolve("postgres.pk8");
+        Files.createDirectory(keyFile);
+
+        Assertions.assertThrows(
+            IOException.class,
+            () -> SSLHandlerTrustStoreImpl.writePrivateKeyFile(keyFile, new byte[]{7})
+        );
+        Assertions.assertTrue(Files.isDirectory(keyFile));
+        assertNoStagingFiles();
+    }
+
+    private void assertNoStagingFiles() throws IOException {
+        try (var entries = Files.list(tempDir)) {
+            Assertions.assertFalse(entries.anyMatch(file ->
+                file.getFileName().toString().startsWith(".dbeaver-private-")
+            ));
+        }
     }
 
     private boolean supportsPosixPermissions() throws IOException {
