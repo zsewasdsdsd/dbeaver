@@ -22,6 +22,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFileAttributeView;
@@ -37,7 +39,7 @@ public class SSLHandlerTrustStoreImplTest {
         Path keyFile = tempDir.resolve("postgres.pk8");
         byte[] key = {0, 1, 2, 3, 4};
 
-        SSLHandlerTrustStoreImpl.writePrivateKeyFile(keyFile, key);
+        writePrivateKeyFile(keyFile, key);
 
         Assertions.assertArrayEquals(key, Files.readAllBytes(keyFile));
         assertNoStagingFiles();
@@ -56,7 +58,7 @@ public class SSLHandlerTrustStoreImplTest {
         Files.writeString(keyFile, "previous key");
         Files.setPosixFilePermissions(keyFile, PosixFilePermissions.fromString("rw-r--r--"));
 
-        SSLHandlerTrustStoreImpl.writePrivateKeyFile(keyFile, new byte[]{5, 6});
+        writePrivateKeyFile(keyFile, new byte[]{5, 6});
 
         Assertions.assertArrayEquals(new byte[]{5, 6}, Files.readAllBytes(keyFile));
         assertNoStagingFiles();
@@ -76,7 +78,7 @@ public class SSLHandlerTrustStoreImplTest {
 
         Assertions.assertThrows(
             IOException.class,
-            () -> SSLHandlerTrustStoreImpl.writePrivateKeyFile(link, new byte[]{1, 2})
+            () -> writePrivateKeyFile(link, new byte[]{1, 2})
         );
         Assertions.assertEquals("must not be changed", Files.readString(targetFile));
         assertNoStagingFiles();
@@ -90,10 +92,29 @@ public class SSLHandlerTrustStoreImplTest {
 
         Assertions.assertThrows(
             IOException.class,
-            () -> SSLHandlerTrustStoreImpl.writePrivateKeyFile(keyFile, new byte[]{7})
+            () -> writePrivateKeyFile(keyFile, new byte[]{7})
         );
         Assertions.assertTrue(Files.isDirectory(keyFile));
         assertNoStagingFiles();
+    }
+
+    // Model and platform tests have distinct OSGi class loaders. Invoke the
+    // package-private implementation helper without exposing it as public API.
+    private static void writePrivateKeyFile(Path path, byte[] contents) throws IOException {
+        try {
+            Method method = SSLHandlerTrustStoreImpl.class.getDeclaredMethod(
+                "writePrivateKeyFile", Path.class, byte[].class
+            );
+            method.setAccessible(true);
+            method.invoke(null, path, contents);
+        } catch (InvocationTargetException e) {
+            if (e.getCause() instanceof IOException ioException) {
+                throw ioException;
+            }
+            throw new AssertionError("Unexpected private key writer failure", e.getCause());
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("Unable to invoke private key writer", e);
+        }
     }
 
     private void assertNoStagingFiles() throws IOException {
