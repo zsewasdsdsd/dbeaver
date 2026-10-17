@@ -49,7 +49,7 @@ public class SQLQueryCompletionColumnQualifierTest extends DBeaverUnitTest {
     }
 
     @Test
-    void BareTableQualifierAndEmptyQualifierAreNotChanged() {
+    void bareTableQualifierAndEmptyQualifierAreNotChanged() {
         assertEquals(List.of("orders"), SQLQueryCompletionTextProvider.columnReferenceQualifierParts(
             TABLE_ONLY_DIALECT, List.of("orders")));
         assertEquals(List.of(), SQLQueryCompletionTextProvider.columnReferenceQualifierParts(
