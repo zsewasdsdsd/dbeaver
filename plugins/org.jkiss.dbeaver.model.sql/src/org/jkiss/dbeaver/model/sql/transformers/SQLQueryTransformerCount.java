@@ -119,6 +119,9 @@ public class SQLQueryTransformerCount implements SQLQueryTransformer {
             // AST rewriting; render the outer statement so its original structure remains intact.
             Select selectBody = statement instanceof Select selectStatement ? selectStatement : null;
             while (selectBody instanceof ParenthesedSelect parenthesedSelect) {
+                // An ORDER BY attached to the parenthesized query may refer to an
+                // output alias removed by COUNT injection. Clear it at each level.
+                parenthesedSelect.setOrderByElements(null);
                 selectBody = parenthesedSelect.getSelect();
             }
             if (selectBody instanceof PlainSelect select) {
