@@ -108,7 +108,12 @@ public class SQLQueryCompletionTextProvider implements SQLQueryCompletionItemVis
                 prefix = this.prepareQualifiedName(columnReferenceQualifierParts(
                     this.dialect, columnName.sourceInfo.referenceName.stringParts)) + this.structSeparator;
             } else if (columnName.sourceInfo.tableOrNull != null && forceQualifiedName) {
-                prefix = this.prepareObjectName(columnName.sourceInfo.tableOrNull) + this.structSeparator;
+                // A resolved table without a parsed reference name may still be in a
+                // different schema. CUBRID requires table.column even in that case.
+                prefix = (this.dialect.supportsSchemaQualifiedColumnNames()
+                    ? this.prepareObjectName(columnName.sourceInfo.tableOrNull)
+                    : this.convertCaseIfNeeded(DBUtils.getQuotedIdentifier(columnName.sourceInfo.tableOrNull)))
+                    + this.structSeparator;
             } else {
                 prefix = "";
             }
