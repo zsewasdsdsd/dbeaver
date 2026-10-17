@@ -9,6 +9,7 @@ Bundle-Vendor: DBeaver Corp
 Fragment-Host: org.jkiss.dbeaver.ext.cubrid
 Bundle-ActivationPolicy: lazy
 Require-Bundle: junit-jupiter-api,
+ org.mockito.mockito-core,
  org.jkiss.dbeaver.test.platform,
  org.jkiss.dbeaver.model,
  org.jkiss.dbeaver.ext.generic,
