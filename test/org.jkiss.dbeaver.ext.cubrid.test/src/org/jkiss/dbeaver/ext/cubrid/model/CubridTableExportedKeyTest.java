@@ -24,6 +24,7 @@ import org.mockito.Mockito;
 
 import java.sql.SQLException;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -34,31 +35,39 @@ class CubridTableExportedKeyTest {
 
     @Test
     void exportedKeysUseOwnerQualifiedTableName() throws SQLException {
-        verifyExportedKeyLookup("owner.orders");
+        verifyExportedKeyLookup(true, "owner.orders");
     }
 
     @Test
     void exportedKeysUseBareTableNameForLegacyDatabases() throws SQLException {
-        verifyExportedKeyLookup("orders");
+        verifyExportedKeyLookup(false, "orders");
     }
 
-    private static void verifyExportedKeyLookup(String uniqueName) throws SQLException {
+    private static void verifyExportedKeyLookup(boolean multiSchema, String expectedTableName) throws SQLException {
         // The real CUBRID JDBC driver uses only the 'table' argument to getExportedKeys;
         // it ignores the separate schema argument even in multi-schema databases.
         CubridTable table = mock(CubridTable.class, Mockito.CALLS_REAL_METHODS);
+        CubridDataSource dataSource = mock(CubridDataSource.class);
+        CubridUser schema = mock(CubridUser.class);
+        doReturn(dataSource).when(table).getDataSource();
+        doReturn(schema).when(table).getSchema();
+        doReturn("orders").when(table).getName();
         doReturn(null).when(table).getCatalog();
-        doReturn(null).when(table).getSchema();
-        doReturn(uniqueName).when(table).getUniqueName();
+        when(dataSource.getSupportMultiSchema()).thenReturn(multiSchema);
+        when(schema.getName()).thenReturn("owner");
+
+        // Exercise the real CUBRID name construction, not a mocked getUniqueName().
+        assertEquals(expectedTableName, table.getUniqueName());
 
         JDBCSession session = mock(JDBCSession.class);
         JDBCDatabaseMetaData metaData = mock(JDBCDatabaseMetaData.class);
         JDBCResultSet resultSet = mock(JDBCResultSet.class);
         when(session.getMetaData()).thenReturn(metaData);
-        when(metaData.getExportedKeys(null, null, uniqueName)).thenReturn(resultSet);
+        when(metaData.getExportedKeys(null, "owner", expectedTableName)).thenReturn(resultSet);
 
         assertTrue(table.loadReferenceInfoList(session, null).isEmpty());
 
-        verify(metaData).getExportedKeys(null, null, uniqueName);
+        verify(metaData).getExportedKeys(null, "owner", expectedTableName);
         verify(resultSet).close();
     }
 }
